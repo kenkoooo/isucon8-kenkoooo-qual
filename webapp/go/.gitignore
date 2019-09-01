@@ -1,4 +1,4 @@
 pkg/
-vendor/
 bin/
-src/github.com/
+src/
+vendoer/src/
