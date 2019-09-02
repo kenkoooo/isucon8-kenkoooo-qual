@@ -5,8 +5,11 @@ docker run --name mariadb -e MYSQL_ROOT_PASSWORD=isucon --cpuset-cpus=0 -d -p 43
 mysql -h 127.0.0.1 -uroot --port 43306 -pisucon
 ```
 
-# 結果
+# やったこと
 - スコア 40707
+- JOIN に使われている reservations の各フィールドにインデックスを張った。
+- 残席の集計用テーブルを作った。
+- getEvents を潰した平たくした。
 
 # 学びなど
 
