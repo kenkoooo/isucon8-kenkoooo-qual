@@ -333,7 +333,11 @@ func main() {
 		templates: template.Must(template.New("").Delims("[[", "]]").Funcs(funcs).ParseGlob("views/*.tmpl")),
 	}
 	e.Use(session.Middleware(sessions.NewCookieStore([]byte("secret"))))
-	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Output: os.Stderr}))
+	fp, err := os.OpenFile("./echo.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{Output: fp}))
 	e.Static("/", "public")
 	e.GET("/", func(c echo.Context) error {
 		events, err := getEvents(false)
