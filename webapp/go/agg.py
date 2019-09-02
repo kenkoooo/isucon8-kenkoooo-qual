@@ -26,5 +26,5 @@ for row in results:
 result = [(t, path) for path, t in d.items()]
 result = sorted(result, reverse=True)
 for t, path in result:
-    time_ms = t // 1000 / 1000
+    time_ms = t // 1000 // 1000
     print("{}\t{}".format(str(time_ms).rjust(10), path))

@@ -44,3 +44,40 @@
     "recent_events": [Event]
 }
 ```
+
+# POST /api/events/:id/actions/reserve
+- `:id` event id
+
+```
+{
+    "sheet_rank": ""
+}
+```
+
+- getLoginUser
+- getEvent
+- `SELECT * FROM sheets WHERE id NOT IN (SELECT sheet_id FROM reservations WHERE event_id = ? AND canceled_at IS NULL FOR UPDATE) AND `rank` = ? ORDER BY RAND() LIMIT 1`
+- `INSERT INTO reservations (event_id, sheet_id, user_id, reserved_at) VALUES (?, ?, ?, ?)`
+
+```
+{
+    "id": resevation id,
+    "sheet_rank": string,
+    "sheet_num": int64
+}
+```
+
+# POST /admin/api/events
+...
+- `INSERT INTO events (title, public_fg, closed_fg, price) VALUES (?, ?, 0, ?)`
+...
+
+# DELETE /api/events/:id/sheets/:rank/:num/reservation
+...
+- `UPDATE reservations SET canceled_at = ? WHERE id = ?`
+...
+
+# POST /admin/api/events/:id/actions/edit
+...
+- `UPDATE events SET public_fg = ?, closed_fg = ? WHERE id = ?`
+...

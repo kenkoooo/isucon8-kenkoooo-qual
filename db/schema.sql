@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS reservations (
     canceled_at DATETIME(6)      DEFAULT NULL,
     KEY event_id_and_sheet_id_idx (event_id, sheet_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE INDEX idx_reservations_user_id ON reservations (user_id);
+CREATE INDEX idx_reservations_event_id ON reservations (event_id);
+CREATE INDEX idx_reservations_sheet_id ON reservations (sheet_id);
 
 CREATE TABLE IF NOT EXISTS administrators (
     id          INTEGER UNSIGNED PRIMARY KEY AUTO_INCREMENT,
