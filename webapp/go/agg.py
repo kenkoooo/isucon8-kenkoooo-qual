@@ -28,3 +28,10 @@ result = sorted(result, reverse=True)
 for t, path in result:
     time_ms = t // 1000 // 1000
     print("{}\t{}".format(str(time_ms).rjust(10), path))
+
+with open("../../bench/result.json") as f:
+    result = json.load(f)
+
+print("score:\t{}".format(result["score"]))
+for log in result["log"]:
+    print(log)

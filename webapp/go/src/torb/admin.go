@@ -84,6 +84,7 @@ func getSales(c echo.Context) error {
 			Num:           s.Num,
 			UserID:        r.UserID,
 			SoldAt:        r.ReservedAt.Format("2006-01-02T15:04:05.000000Z"),
+			SoldAtUnix:    r.ReservedAt.Unix(),
 			Price:         e.Price + s.Price,
 		}
 		if r.CanceledAt != nil {
