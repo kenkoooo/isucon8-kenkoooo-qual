@@ -712,77 +712,8 @@ func main() {
 		c.JSON(200, e)
 		return nil
 	}, adminLoginRequired)
-	e.GET("/admin/api/reports/events/:id/sales", func(c echo.Context) error {
-		eventID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-		if err != nil {
-			return resError(c, "not_found", 404)
-		}
-
-		event, err := getEvent(eventID, -1)
-		if err != nil {
-			return err
-		}
-
-		rows, err := db.Query("SELECT r.*, s.rank AS sheet_rank, s.num AS sheet_num, s.price AS sheet_price, e.price AS event_price FROM reservations r INNER JOIN sheets s ON s.id = r.sheet_id INNER JOIN events e ON e.id = r.event_id WHERE r.event_id = ? ORDER BY reserved_at ASC FOR UPDATE", event.ID)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-
-		var reports []Report
-		for rows.Next() {
-			var reservation Reservation
-			var sheet Sheet
-			if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &sheet.Rank, &sheet.Num, &sheet.Price, &event.Price); err != nil {
-				return err
-			}
-			report := Report{
-				ReservationID: reservation.ID,
-				EventID:       event.ID,
-				Rank:          sheet.Rank,
-				Num:           sheet.Num,
-				UserID:        reservation.UserID,
-				SoldAt:        reservation.ReservedAt.Format("2006-01-02T15:04:05.000000Z"),
-				Price:         event.Price + sheet.Price,
-			}
-			if reservation.CanceledAt != nil {
-				report.CanceledAt = reservation.CanceledAt.Format("2006-01-02T15:04:05.000000Z")
-			}
-			reports = append(reports, report)
-		}
-		return renderReportCSV(c, reports)
-	}, adminLoginRequired)
-	e.GET("/admin/api/reports/sales", func(c echo.Context) error {
-		rows, err := db.Query("select r.*, s.rank as sheet_rank, s.num as sheet_num, s.price as sheet_price, e.id as event_id, e.price as event_price from reservations r inner join sheets s on s.id = r.sheet_id inner join events e on e.id = r.event_id order by reserved_at asc for update")
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-
-		var reports []Report
-		for rows.Next() {
-			var reservation Reservation
-			var sheet Sheet
-			var event Event
-			if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &sheet.Rank, &sheet.Num, &sheet.Price, &event.ID, &event.Price); err != nil {
-				return err
-			}
-			report := Report{
-				ReservationID: reservation.ID,
-				EventID:       event.ID,
-				Rank:          sheet.Rank,
-				Num:           sheet.Num,
-				UserID:        reservation.UserID,
-				SoldAt:        reservation.ReservedAt.Format("2006-01-02T15:04:05.000000Z"),
-				Price:         event.Price + sheet.Price,
-			}
-			if reservation.CanceledAt != nil {
-				report.CanceledAt = reservation.CanceledAt.Format("2006-01-02T15:04:05.000000Z")
-			}
-			reports = append(reports, report)
-		}
-		return renderReportCSV(c, reports)
-	}, adminLoginRequired)
+	e.GET("/admin/api/reports/events/:id/sales", getSalesById, adminLoginRequired)
+	e.GET("/admin/api/reports/sales", getSales, adminLoginRequired)
 
 	e.Start(":8080")
 }
