@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 	"sort"
 )
 
@@ -50,36 +49,68 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 		userIDs = append(userIDs, &params.UserID)
 	}
 
-	RefineEvent(reservations, sheets, userIDs, &event, loginUserID)
+	totalSheetCount, err := GetTotalSheetByRank()
+	if err != nil {
+		return nil, err
+	}
 
-	return &event, nil
-}
-
-func RefineEvent(reservations []*Reservation, sheets []*Sheet, userIDs []*sql.NullInt64, event *Event, loginUserID int64) {
+	event.Total = 0
 	event.Sheets = map[string]*Sheets{
 		"S": &Sheets{},
 		"A": &Sheets{},
 		"B": &Sheets{},
 		"C": &Sheets{},
 	}
+	for _, partialSheet := range totalSheetCount {
+		event.Total += partialSheet.Total
+		event.Remains += partialSheet.Total
+		event.Sheets[partialSheet.Rank].Total = partialSheet.Total
+		event.Sheets[partialSheet.Rank].Remains = partialSheet.Total
+		event.Sheets[partialSheet.Rank].Price = event.Price + partialSheet.Price
+	}
+
+	RefineEvent(reservations, sheets, userIDs, &event, loginUserID)
+
+	return &event, nil
+}
+
+func RefineEvent(reservations []*Reservation, sheets []*Sheet, userIDs []*sql.NullInt64, event *Event, loginUserID int64) {
 	for i, r := range reservations {
 		s := sheets[i]
 		userID := userIDs[i]
-		event.Sheets[s.Rank].Price = event.Price + s.Price
-		event.Total++
-		event.Sheets[s.Rank].Total++
 
 		if r.ReservedAt != nil {
 			s.Mine = userID.Valid && userID.Int64 == loginUserID
 			s.Reserved = true
 			s.ReservedAtUnix = r.ReservedAt.Unix()
-		} else {
-			event.Remains++
-			event.Sheets[s.Rank].Remains++
+			event.Remains--
+			event.Sheets[s.Rank].Remains--
 		}
 
 		event.Sheets[s.Rank].Detail = append(event.Sheets[s.Rank].Detail, s)
 	}
+}
+
+type PartialSheet struct {
+	Rank  string
+	Total int
+	Price int64
+}
+
+func GetTotalSheetByRank() (map[string]PartialSheet, error) {
+	rows, err := db.Query("SELECT rank, COUNT(*), MAX(price) FROM sheets GROUP BY rank")
+	if err != nil {
+		return nil, err
+	}
+	s := make(map[string]PartialSheet)
+	for rows.Next() {
+		var p PartialSheet
+		if err := rows.Scan(&p.Rank, &p.Total, &p.Price); err != nil {
+			return nil, err
+		}
+		s[p.Rank] = p
+	}
+	return s, nil
 }
 
 func getEvents(all bool) ([]*Event, error) {
@@ -102,7 +133,12 @@ func getEvents(all bool) ([]*Event, error) {
 	}
 	defer rows.Close()
 
-	eventMap := make(map[int64]Event)
+	totalSheetCount, err := GetTotalSheetByRank()
+	if err != nil {
+		return nil, err
+	}
+
+	eventMap := make(map[int64]*Event)
 	sheets := make(map[int64][]*Sheet)
 	reservations := make(map[int64][]*Reservation)
 	userIDs := make(map[int64][]*sql.NullInt64)
@@ -127,7 +163,7 @@ func getEvents(all bool) ([]*Event, error) {
 			continue
 		}
 
-		eventMap[e.ID] = e
+		eventMap[e.ID] = &e
 		if fakeS.ID.Valid {
 			s := Sheet{
 				ID:    fakeS.ID.Int64,
@@ -142,29 +178,35 @@ func getEvents(all bool) ([]*Event, error) {
 		}
 	}
 
-	fmt.Println(eventMap)
 	var events Events
 	for _, event := range eventMap {
 		s := sheets[event.ID]
 		r := reservations[event.ID]
 		userID := userIDs[event.ID]
-		RefineEvent(r, s, userID, &event, -1)
+
+		event.Total = 0
+		event.Sheets = map[string]*Sheets{
+			"S": &Sheets{},
+			"A": &Sheets{},
+			"B": &Sheets{},
+			"C": &Sheets{},
+		}
+		for _, partialSheet := range totalSheetCount {
+			event.Total += partialSheet.Total
+			event.Remains += partialSheet.Total
+			event.Sheets[partialSheet.Rank].Total = partialSheet.Total
+			event.Sheets[partialSheet.Rank].Remains = partialSheet.Total
+			event.Sheets[partialSheet.Rank].Price = event.Price + partialSheet.Price
+		}
+
+		RefineEvent(r, s, userID, event, -1)
+
 		for k := range event.Sheets {
 			event.Sheets[k].Detail = nil
 		}
-		events = append(events, &event)
-	}
 
-	//for i, v := range events {
-	//	event, err := getEvent(v.ID, -1)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	for k := range event.Sheets {
-	//		event.Sheets[k].Detail = nil
-	//	}
-	//	events[i] = event
-	//}
+		events = append(events, event)
+	}
 	sort.Sort(events)
 	return events, nil
 }
