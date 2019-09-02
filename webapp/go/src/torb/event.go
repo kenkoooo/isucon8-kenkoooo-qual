@@ -18,7 +18,7 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 	SELECT s.*, r.user_id, r.reserved_at
 	FROM sheets s
 	LEFT JOIN (
-		SELECT * 
+		SELECT sheet_id, user_id, reserved_at 
 		FROM reservations 
 		WHERE event_id = ? AND canceled_at IS NULL 
 		GROUP BY event_id, sheet_id 
