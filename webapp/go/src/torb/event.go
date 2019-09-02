@@ -14,35 +14,50 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 		"C": &Sheets{},
 	}
 
-	rows, err := db.Query("SELECT * FROM sheets ORDER BY `rank`, num")
+	query := `
+	SELECT s.*, r.user_id, r.reserved_at
+	FROM sheets s
+	LEFT JOIN (
+		SELECT * 
+		FROM reservations 
+		WHERE event_id = ? AND canceled_at IS NULL 
+		GROUP BY event_id, sheet_id 
+		HAVING reserved_at = MIN(reserved_at)
+	) r ON r.sheet_id = s.id
+	ORDER BY s.rank, s.num
+	`
+
+	rows, err := db.Query(query, event.ID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var sheet Sheet
-		if err := rows.Scan(&sheet.ID, &sheet.Rank, &sheet.Num, &sheet.Price); err != nil {
+		var s Sheet
+		var r Reservation
+		var params struct {
+			UserID sql.NullInt64
+		}
+
+		if err := rows.Scan(
+			&s.ID, &s.Rank, &s.Num, &s.Price, &params.UserID, &r.ReservedAt); err != nil {
 			return nil, err
 		}
-		event.Sheets[sheet.Rank].Price = event.Price + sheet.Price
+		event.Sheets[s.Rank].Price = event.Price + s.Price
 		event.Total++
-		event.Sheets[sheet.Rank].Total++
+		event.Sheets[s.Rank].Total++
 
-		var reservation Reservation
-		err := db.QueryRow("SELECT * FROM reservations WHERE event_id = ? AND sheet_id = ? AND canceled_at IS NULL GROUP BY event_id, sheet_id HAVING reserved_at = MIN(reserved_at)", event.ID, sheet.ID).Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt)
-		if err == nil {
-			sheet.Mine = reservation.UserID == loginUserID
-			sheet.Reserved = true
-			sheet.ReservedAtUnix = reservation.ReservedAt.Unix()
-		} else if err == sql.ErrNoRows {
-			event.Remains++
-			event.Sheets[sheet.Rank].Remains++
+		if r.ReservedAt != nil {
+			s.Mine = params.UserID.Valid && params.UserID.Int64 == loginUserID
+			s.Reserved = true
+			s.ReservedAtUnix = r.ReservedAt.Unix()
 		} else {
-			return nil, err
+			event.Remains++
+			event.Sheets[s.Rank].Remains++
 		}
 
-		event.Sheets[sheet.Rank].Detail = append(event.Sheets[sheet.Rank].Detail, &sheet)
+		event.Sheets[s.Rank].Detail = append(event.Sheets[s.Rank].Detail, &s)
 	}
 
 	return &event, nil

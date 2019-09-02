@@ -277,6 +277,7 @@ func main() {
 	}
 
 	e := echo.New()
+	e.HTTPErrorHandler = customHTTPErrorHandler
 	funcs := template.FuncMap{
 		"encode_json": func(v interface{}) string {
 			b, _ := json.Marshal(v)
