@@ -114,98 +114,63 @@ func GetTotalSheetByRank() (map[string]PartialSheet, error) {
 }
 
 func getEvents(all bool) ([]*Event, error) {
-	query := `
-	SELECT s.*, r.user_id, r.reserved_at, e.id, e.title, e.public_fg, e.closed_fg, e.price
-	FROM events e
-	LEFT JOIN (
-		SELECT sheet_id, user_id, reserved_at, event_id
-		FROM reservations 
-		WHERE canceled_at IS NULL 
-		GROUP BY event_id, sheet_id 
-		HAVING reserved_at = MIN(reserved_at)
-	) r ON r.event_id = e.id
-	LEFT JOIN sheets s ON s.id = r.sheet_id
-	ORDER BY s.rank, s.num
-	`
-	rows, err := db.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	totalSheetCount, err := GetTotalSheetByRank()
 	if err != nil {
 		return nil, err
 	}
 
 	eventMap := make(map[int64]*Event)
-	sheets := make(map[int64][]*Sheet)
-	reservations := make(map[int64][]*Reservation)
-	userIDs := make(map[int64][]*sql.NullInt64)
-	for rows.Next() {
-		var e Event
-		var r Reservation
-		var userID sql.NullInt64
-		var fakeS struct {
-			ID    sql.NullInt64
-			Rank  sql.NullString
-			Num   sql.NullInt64
-			Price sql.NullInt64
-		}
-
-		if err := rows.Scan(
-			&fakeS.ID, &fakeS.Rank, &fakeS.Num, &fakeS.Price,
-			&userID, &r.ReservedAt,
-			&e.ID, &e.Title, &e.PublicFg, &e.ClosedFg, &e.Price); err != nil {
+	{
+		rows, err := db.Query("SELECT * FROM events")
+		if err != nil {
 			return nil, err
 		}
-		if !all && !e.PublicFg {
-			continue
-		}
-
-		eventMap[e.ID] = &e
-		if fakeS.ID.Valid {
-			s := Sheet{
-				ID:    fakeS.ID.Int64,
-				Rank:  fakeS.Rank.String,
-				Num:   fakeS.Num.Int64,
-				Price: fakeS.Price.Int64,
+		defer rows.Close()
+		for rows.Next() {
+			var e Event
+			if err := rows.Scan(&e.ID, &e.Title, &e.PublicFg, &e.ClosedFg, &e.Price); err != nil {
+				return nil, err
 			}
 
-			sheets[e.ID] = append(sheets[e.ID], &s)
-			reservations[e.ID] = append(reservations[e.ID], &r)
-			userIDs[e.ID] = append(userIDs[e.ID], &userID)
+			e.Total = 0
+			e.Sheets = map[string]*Sheets{
+				"S": &Sheets{},
+				"A": &Sheets{},
+				"B": &Sheets{},
+				"C": &Sheets{},
+			}
+			for _, partialSheet := range totalSheetCount {
+				e.Total += partialSheet.Total
+				e.Remains += partialSheet.Total
+				e.Sheets[partialSheet.Rank].Total = partialSheet.Total
+				e.Sheets[partialSheet.Rank].Remains = partialSheet.Total
+				e.Sheets[partialSheet.Rank].Price = e.Price + partialSheet.Price
+			}
+			eventMap[e.ID] = &e
 		}
+	}
+	query := "SELECT sheet_rank, sold_count, event_id FROM sold"
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var rank string
+		var sold int
+		var eventId int64
+		if err := rows.Scan(&rank, &sold, &eventId); err != nil {
+			return nil, err
+		}
+		eventMap[eventId].Sheets[rank].Remains -= sold
+		eventMap[eventId].Remains -= sold
 	}
 
 	var events Events
-	for _, event := range eventMap {
-		s := sheets[event.ID]
-		r := reservations[event.ID]
-		userID := userIDs[event.ID]
-
-		event.Total = 0
-		event.Sheets = map[string]*Sheets{
-			"S": &Sheets{},
-			"A": &Sheets{},
-			"B": &Sheets{},
-			"C": &Sheets{},
+	for _, e := range eventMap {
+		if !all && !e.PublicFg {
+			continue
 		}
-		for _, partialSheet := range totalSheetCount {
-			event.Total += partialSheet.Total
-			event.Remains += partialSheet.Total
-			event.Sheets[partialSheet.Rank].Total = partialSheet.Total
-			event.Sheets[partialSheet.Rank].Remains = partialSheet.Total
-			event.Sheets[partialSheet.Rank].Price = event.Price + partialSheet.Price
-		}
-
-		RefineEvent(r, s, userID, event, -1)
-
-		for k := range event.Sheets {
-			event.Sheets[k].Detail = nil
-		}
-
-		events = append(events, event)
+		events = append(events, e)
 	}
 	sort.Sort(events)
 	return events, nil
