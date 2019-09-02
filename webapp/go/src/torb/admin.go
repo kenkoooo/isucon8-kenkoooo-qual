@@ -71,25 +71,41 @@ func getSales(c echo.Context) error {
 
 	var reports []Report
 	for rows.Next() {
-		var reservation Reservation
-		var sheet Sheet
-		var event Event
-		if err := rows.Scan(&reservation.ID, &reservation.EventID, &reservation.SheetID, &reservation.UserID, &reservation.ReservedAt, &reservation.CanceledAt, &sheet.Rank, &sheet.Num, &sheet.Price, &event.ID, &event.Price); err != nil {
+		var r Reservation
+		var s Sheet
+		var e Event
+		if err := rows.Scan(&r.ID, &r.EventID, &r.SheetID, &r.UserID, &r.ReservedAt, &r.CanceledAt, &s.Rank, &s.Num, &s.Price, &e.ID, &e.Price); err != nil {
 			return err
 		}
 		report := Report{
-			ReservationID: reservation.ID,
-			EventID:       event.ID,
-			Rank:          sheet.Rank,
-			Num:           sheet.Num,
-			UserID:        reservation.UserID,
-			SoldAt:        reservation.ReservedAt.Format("2006-01-02T15:04:05.000000Z"),
-			Price:         event.Price + sheet.Price,
+			ReservationID: r.ID,
+			EventID:       e.ID,
+			Rank:          s.Rank,
+			Num:           s.Num,
+			UserID:        r.UserID,
+			SoldAt:        r.ReservedAt.Format("2006-01-02T15:04:05.000000Z"),
+			Price:         e.Price + s.Price,
 		}
-		if reservation.CanceledAt != nil {
-			report.CanceledAt = reservation.CanceledAt.Format("2006-01-02T15:04:05.000000Z")
+		if r.CanceledAt != nil {
+			report.CanceledAt = r.CanceledAt.Format("2006-01-02T15:04:05.000000Z")
 		}
 		reports = append(reports, report)
 	}
 	return renderReportCSV(c, reports)
+}
+
+func adminTop(c echo.Context) error {
+	var events []*Event
+	administrator := c.Get("administrator")
+	if administrator != nil {
+		var err error
+		if events, err = getEvents(true); err != nil {
+			return err
+		}
+	}
+	return c.Render(200, "admin.tmpl", echo.Map{
+		"events":        events,
+		"administrator": administrator,
+		"origin":        c.Scheme() + "://" + c.Request().Host,
+	})
 }

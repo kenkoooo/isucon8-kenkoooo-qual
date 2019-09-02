@@ -184,43 +184,6 @@ func getLoginAdministrator(c echo.Context) (*Administrator, error) {
 	return &administrator, err
 }
 
-func getEvents(all bool) ([]*Event, error) {
-	tx, err := db.Begin()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Commit()
-
-	rows, err := tx.Query("SELECT * FROM events ORDER BY id ASC")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var events []*Event
-	for rows.Next() {
-		var event Event
-		if err := rows.Scan(&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price); err != nil {
-			return nil, err
-		}
-		if !all && !event.PublicFg {
-			continue
-		}
-		events = append(events, &event)
-	}
-	for i, v := range events {
-		event, err := getEvent(v.ID, -1)
-		if err != nil {
-			return nil, err
-		}
-		for k := range event.Sheets {
-			event.Sheets[k].Detail = nil
-		}
-		events[i] = event
-	}
-	return events, nil
-}
-
 func sanitizeEvent(e *Event) *Event {
 	sanitized := *e
 	sanitized.Price = 0
@@ -561,21 +524,7 @@ func main() {
 
 		return c.NoContent(204)
 	}, loginRequired)
-	e.GET("/admin/", func(c echo.Context) error {
-		var events []*Event
-		administrator := c.Get("administrator")
-		if administrator != nil {
-			var err error
-			if events, err = getEvents(true); err != nil {
-				return err
-			}
-		}
-		return c.Render(200, "admin.tmpl", echo.Map{
-			"events":        events,
-			"administrator": administrator,
-			"origin":        c.Scheme() + "://" + c.Request().Host,
-		})
-	}, fillinAdministrator)
+	e.GET("/admin/", adminTop, fillinAdministrator)
 	e.POST("/admin/api/actions/login", func(c echo.Context) error {
 		var params struct {
 			LoginName string `json:"login_name"`

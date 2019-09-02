@@ -62,3 +62,40 @@ func getEvent(eventID, loginUserID int64) (*Event, error) {
 
 	return &event, nil
 }
+
+func getEvents(all bool) ([]*Event, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Commit()
+
+	rows, err := tx.Query("SELECT * FROM events ORDER BY id ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []*Event
+	for rows.Next() {
+		var event Event
+		if err := rows.Scan(&event.ID, &event.Title, &event.PublicFg, &event.ClosedFg, &event.Price); err != nil {
+			return nil, err
+		}
+		if !all && !event.PublicFg {
+			continue
+		}
+		events = append(events, &event)
+	}
+	for i, v := range events {
+		event, err := getEvent(v.ID, -1)
+		if err != nil {
+			return nil, err
+		}
+		for k := range event.Sheets {
+			event.Sheets[k].Detail = nil
+		}
+		events[i] = event
+	}
+	return events, nil
+}
