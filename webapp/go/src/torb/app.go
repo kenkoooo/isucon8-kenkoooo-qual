@@ -279,6 +279,21 @@ func main() {
 			return nil
 		}
 
+		if _, err := db.Exec(`INSERT INTO sold
+			SELECT event_id, s.rank, count(*)
+			FROM sheets s
+			LEFT JOIN (
+			SELECT sheet_id, event_id, reserved_at
+			FROM reservations 
+			WHERE canceled_at IS NULL 
+			GROUP BY event_id, sheet_id 
+			HAVING reserved_at = MIN(reserved_at)
+			) r ON r.sheet_id = s.id
+			GROUP BY s.rank, r.event_id
+		`); err != nil {
+			return err
+		}
+
 		return c.NoContent(204)
 	})
 	e.POST("/api/users", func(c echo.Context) error {
@@ -435,13 +450,20 @@ func main() {
 
 			res, err := tx.Exec("INSERT INTO reservations (event_id, sheet_id, user_id, reserved_at) VALUES (?, ?, ?, ?)", event.ID, sheet.ID, user.ID, time.Now().UTC().Format("2006-01-02 15:04:05.000000"))
 			if err != nil {
+				log.Println("re-try: rollback by", err)
+				continue
+			}
+
+			reservationID, err = res.LastInsertId()
+			if err != nil {
 				tx.Rollback()
 				log.Println("re-try: rollback by", err)
 				continue
 			}
-			reservationID, err = res.LastInsertId()
+			_, err = tx.Exec(`INSERT INTO sold (event_id, sheet_rank, sold_count)
+				SELECT ?, s.rank, 1 FROM sheets s WHERE s.id=?
+				ON DUPLICATE KEY UPDATE sold_count = sold_count+1`, event.ID, sheet.ID)
 			if err != nil {
-				tx.Rollback()
 				log.Println("re-try: rollback by", err)
 				continue
 			}
@@ -513,6 +535,12 @@ func main() {
 		}
 
 		if _, err := tx.Exec("UPDATE reservations SET canceled_at = ? WHERE id = ?", time.Now().UTC().Format("2006-01-02 15:04:05.000000"), reservation.ID); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO sold (event_id, sheet_rank, sold_count)
+			SELECT ?, s.rank, -1 FROM sheets s WHERE s.id=?
+			ON DUPLICATE KEY UPDATE sold_count = sold_count-1`, event.ID, sheet.ID); err != nil {
 			tx.Rollback()
 			return err
 		}

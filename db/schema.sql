@@ -50,24 +50,3 @@ CREATE TABLE IF NOT EXISTS sold (
     PRIMARY KEY pkey_event_id_sheet_rank (event_id, sheet_rank)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-DELIMITER //
-CREATE TRIGGER sold_insert_reservation
-AFTER INSERT ON reservations FOR EACH ROW
-BEGIN
-    IF NEW.canceled_at IS NULL THEN
-        INSERT INTO sold (event_id, sheet_rank, sold_count)
-        SELECT NEW.event_id, s.`rank`, 1 FROM sheets s WHERE s.id=NEW.sheet_id
-        ON DUPLICATE KEY UPDATE sold_count = sold_count+1;
-    END IF;
-END; //
-
-DELIMITER //
-CREATE TRIGGER sold_update_reservation
-AFTER UPDATE ON reservations FOR EACH ROW
-BEGIN
-    IF NEW.canceled_at IS NOT NULL THEN
-        INSERT INTO sold (event_id, sheet_rank, sold_count)
-        SELECT NEW.event_id, s.`rank`, -1 FROM sheets s WHERE s.id=NEW.sheet_id
-        ON DUPLICATE KEY UPDATE sold_count = sold_count-1;
-    END IF;
-END; //
